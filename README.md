@@ -44,11 +44,11 @@ To run any specific implementation:
    ```
 2. Switch to the desired feature branch:
     ```bash
-    git checkout feature/weighted-scheduler
+    git checkout feature/weighted_rr_scheduler
     ```
 
     ```bash
-    git checkout feature/copy-on-write
+    git checkout feature/COW(copy-on-write)
     ```
 
     ```bash

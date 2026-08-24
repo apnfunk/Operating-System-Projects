@@ -4,8 +4,8 @@ A collection of operating system projects exploring process management, scheduli
 
 The repository contains:
 
-- 🐚 A standalone **Custom UNIX Shell** (available in the `custom-shell/` directory on the `main` branch).
-- 🖥️ Multiple **xv6 kernel extensions**, each maintained in its own feature branch.
+-  A standalone **Custom Shell** (available in the `custom-shell/` directory on the `main` branch).
+-  Multiple **xv6 kernel extensions**, each maintained in its own feature branch.
 
 > **Note:** The xv6 implementations involve deep, mutually exclusive modifications to core kernel subsystems (Process Scheduler, Virtual Memory, File System, and Trap Handling). Therefore, each implementation is maintained in a separate Git branch.
 

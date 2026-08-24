@@ -256,7 +256,7 @@ create(char *path, short type, short major, short minor)
   if((ip = dirlookup(dp, name, 0)) != 0){
     iunlockput(dp);
     ilock(ip);
-    if(type == T_FILE && (ip->type == T_FILE || ip->type == T_DEVICE))
+    if(type == T_FILE && (ip->type == T_FILE || ip->type == T_DEVICE || ip->type == T_SYMLINK))
       return ip;
     iunlockput(ip);
     return 0;
@@ -301,6 +301,109 @@ create(char *path, short type, short major, short minor)
   return 0;
 }
 
+//added:
+// Create a symbolic link
+uint64
+sys_symlink(void)
+{
+  char target[MAXPATH], path[MAXPATH];
+  struct inode *ip;
+
+  // Get arguments: target path and link path
+  if(argstr(0, target, MAXPATH) < 0 || argstr(1, path, MAXPATH) < 0)
+    return -1;
+
+  begin_op();
+
+  // Create a new inode of type T_SYMLINK
+  ip = create(path, T_SYMLINK, 0, 0);
+  if(ip == 0){
+    end_op();
+    return -1;
+  }
+
+  // Write the target path into the symlink inode's data
+  if(writei(ip, 0, (uint64)target, 0, strlen(target)) != strlen(target)){
+    iunlockput(ip);
+    end_op();
+    return -1;
+  }
+
+  iunlockput(ip);
+  end_op();
+
+  return 0;
+}
+
+// uint64
+// sys_open(void)
+// {
+//   char path[MAXPATH];
+//   int fd, omode;
+//   struct file *f;
+//   struct inode *ip;
+//   int n;
+
+//   argint(1, &omode);
+//   if((n = argstr(0, path, MAXPATH)) < 0)
+//     return -1;
+
+//   begin_op();
+
+//   if(omode & O_CREATE){
+//     ip = create(path, T_FILE, 0, 0);
+//     if(ip == 0){
+//       end_op();
+//       return -1;
+//     }
+//   } else {
+//     if((ip = namei(path)) == 0){
+//       end_op();
+//       return -1;
+//     }
+//     ilock(ip);
+//     if(ip->type == T_DIR && omode != O_RDONLY){
+//       iunlockput(ip);
+//       end_op();
+//       return -1;
+//     }
+//   }
+
+//   if(ip->type == T_DEVICE && (ip->major < 0 || ip->major >= NDEV)){
+//     iunlockput(ip);
+//     end_op();
+//     return -1;
+//   }
+
+//   if((f = filealloc()) == 0 || (fd = fdalloc(f)) < 0){
+//     if(f)
+//       fileclose(f);
+//     iunlockput(ip);
+//     end_op();
+//     return -1;
+//   }
+
+//   if(ip->type == T_DEVICE){
+//     f->type = FD_DEVICE;
+//     f->major = ip->major;
+//   } else {
+//     f->type = FD_INODE;
+//     f->off = 0;
+//   }
+//   f->ip = ip;
+//   f->readable = !(omode & O_WRONLY);
+//   f->writable = (omode & O_WRONLY) || (omode & O_RDWR);
+
+//   if((omode & O_TRUNC) && ip->type == T_FILE){
+//     itrunc(ip);
+//   }
+
+//   iunlock(ip);
+//   end_op();
+
+//   return fd;
+// }
+
 uint64
 sys_open(void)
 {
@@ -328,6 +431,46 @@ sys_open(void)
       return -1;
     }
     ilock(ip);
+
+    // Handle symbolic links (with recursion limit)
+    if(ip->type == T_SYMLINK && !(omode & O_NOFOLLOW)){
+      int depth = 0;
+      while(ip->type == T_SYMLINK && depth < 10){
+        char target[MAXPATH];
+        int len;
+        
+        // Read the target path from the symlink
+        if((len = readi(ip, 0, (uint64)target, 0, MAXPATH)) <= 0){
+          iunlockput(ip);
+          end_op();
+          return -1;
+        }
+        
+        // Null-terminate the target path
+        if(len >= MAXPATH)
+          len = MAXPATH - 1;
+        target[len] = 0;
+        
+        iunlockput(ip);
+        
+        // Follow the symlink
+        if((ip = namei(target)) == 0){
+          end_op();
+          return -1;
+        }
+        
+        ilock(ip);
+        depth++;
+      }
+      
+      // Check if we hit the recursion limit
+      if(depth >= 10 && ip->type == T_SYMLINK){
+        iunlockput(ip);
+        end_op();
+        return -1;  // Too many levels of symbolic links
+      }
+    }
+
     if(ip->type == T_DIR && omode != O_RDONLY){
       iunlockput(ip);
       end_op();
@@ -461,7 +604,7 @@ sys_exec(void)
       goto bad;
   }
 
-  int ret = exec(path, argv);
+  int ret = kexec(path, argv);
 
   for(i = 0; i < NELEM(argv) && argv[i] != 0; i++)
     kfree(argv[i]);

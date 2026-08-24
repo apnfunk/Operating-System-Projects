@@ -13,9 +13,9 @@ fetchaddr(uint64 addr, uint64 *ip)
 {
   struct proc *p = myproc();
   if(addr >= p->sz || addr+sizeof(uint64) > p->sz) // both tests needed, in case of overflow
-  return -1;
+    return -1;
   if(copyin(p->pagetable, (char *)ip, addr, sizeof(*ip)) != 0)
-  return -1;
+    return -1;
   return 0;
 }
 
@@ -26,7 +26,7 @@ fetchstr(uint64 addr, char *buf, int max)
 {
   struct proc *p = myproc();
   if(copyinstr(p->pagetable, buf, addr, max) < 0)
-  return -1;
+    return -1;
   return strlen(buf);
 }
 
@@ -35,17 +35,17 @@ argraw(int n)
 {
   struct proc *p = myproc();
   switch (n) {
-    case 0:
+  case 0:
     return p->trapframe->a0;
-    case 1:
+  case 1:
     return p->trapframe->a1;
-    case 2:
+  case 2:
     return p->trapframe->a2;
-    case 3:
+  case 3:
     return p->trapframe->a3;
-    case 4:
+  case 4:
     return p->trapframe->a4;
-    case 5:
+  case 5:
     return p->trapframe->a5;
   }
   panic("argraw");
@@ -80,7 +80,6 @@ argstr(int n, char *buf, int max)
 }
 
 // Prototypes for the functions that handle system calls.
-extern uint64 sys_top(void);
 extern uint64 sys_fork(void);
 extern uint64 sys_exit(void);
 extern uint64 sys_wait(void);
@@ -93,7 +92,7 @@ extern uint64 sys_chdir(void);
 extern uint64 sys_dup(void);
 extern uint64 sys_getpid(void);
 extern uint64 sys_sbrk(void);
-extern uint64 sys_sleep(void);
+extern uint64 sys_pause(void);
 extern uint64 sys_uptime(void);
 extern uint64 sys_open(void);
 extern uint64 sys_write(void);
@@ -102,6 +101,7 @@ extern uint64 sys_unlink(void);
 extern uint64 sys_link(void);
 extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
+extern uint64 sys_symlink(void);  // ADDED
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -118,7 +118,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_dup]     sys_dup,
 [SYS_getpid]  sys_getpid,
 [SYS_sbrk]    sys_sbrk,
-[SYS_sleep]   sys_sleep,
+[SYS_pause]   sys_pause,
 [SYS_uptime]  sys_uptime,
 [SYS_open]    sys_open,
 [SYS_write]   sys_write,
@@ -127,8 +127,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
-[SYS_top]    sys_top
-
+[SYS_symlink] sys_symlink,  // ADDED 
 };
 
 void

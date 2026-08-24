@@ -44,6 +44,7 @@ fsinit(int dev) {
   if(sb.magic != FSMAGIC)
     panic("invalid file system");
   initlog(dev, &sb);
+  ireclaim(dev);
 }
 
 // Zero a block.
@@ -369,16 +370,28 @@ iunlockput(struct inode *ip)
   iput(ip);
 }
 
-// Inode content
-//
-// The content (data) associated with each inode is stored
-// in blocks on the disk. The first NDIRECT block numbers
-// are listed in ip->addrs[].  The next NINDIRECT blocks are
-// listed in block ip->addrs[NDIRECT].
+void
+ireclaim(int dev)
+{
+  for (int inum = 1; inum < sb.ninodes; inum++) {
+    struct inode *ip = 0;
+    struct buf *bp = bread(dev, IBLOCK(inum, sb));
+    struct dinode *dip = (struct dinode *)bp->data + inum % IPB;
+    if (dip->type != 0 && dip->nlink == 0) {  // is an orphaned inode
+      printf("ireclaim: orphaned inode %d\n", inum);
+      ip = iget(dev, inum);
+    }
+    brelse(bp);
+    if (ip) {
+      begin_op();
+      ilock(ip);
+      iunlock(ip);
+      iput(ip);
+      end_op();
+    }
+  }
+}
 
-// Return the disk block address of the nth block in inode ip.
-// If there is no such block, bmap allocates one.
-// returns 0 if out of disk space.
 static uint
 bmap(struct inode *ip, uint bn)
 {
@@ -416,19 +429,66 @@ bmap(struct inode *ip, uint bn)
     brelse(bp);
     return addr;
   }
+  bn -= NINDIRECT;
+
+  if(bn < NINDIRECT * NDINDIRECT){
+    // Doubly-indirect block
+    // bn is now the block number within the doubly-indirect space
+    uint dib_index = bn / NDINDIRECT;      // which indirect block in the doubly-indirect block
+    uint dib_offset = bn % NDINDIRECT;     // which block within that indirect block
+
+    // Load/allocate doubly-indirect block
+    if((addr = ip->addrs[NDIRECT+1]) == 0){
+      addr = balloc(ip->dev);
+      if(addr == 0)
+        return 0;
+      ip->addrs[NDIRECT+1] = addr;
+    }
+    
+    // Read doubly-indirect block
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+    
+    // Get the indirect block address from doubly-indirect block
+    uint ib_addr = a[dib_index];
+    if(ib_addr == 0){
+      ib_addr = balloc(ip->dev);
+      if(ib_addr == 0){
+        brelse(bp);
+        return 0;
+      }
+      a[dib_index] = ib_addr;
+      log_write(bp);
+    }
+    brelse(bp);
+    
+    // Read the indirect block
+    bp = bread(ip->dev, ib_addr);
+    a = (uint*)bp->data;
+    
+    // Get the data block address from indirect block
+    if((addr = a[dib_offset]) == 0){
+      addr = balloc(ip->dev);
+      if(addr){
+        a[dib_offset] = addr;
+        log_write(bp);
+      }
+    }
+    brelse(bp);
+    return addr;
+  }
 
   panic("bmap: out of range");
 }
 
-// Truncate inode (discard contents).
-// Caller must hold ip->lock.
 void
 itrunc(struct inode *ip)
 {
   int i, j;
-  struct buf *bp;
-  uint *a;
+  struct buf *bp, *bp2;
+  uint *a, *a2;
 
+  // Free direct blocks
   for(i = 0; i < NDIRECT; i++){
     if(ip->addrs[i]){
       bfree(ip->dev, ip->addrs[i]);
@@ -436,6 +496,7 @@ itrunc(struct inode *ip)
     }
   }
 
+  // Free single-indirect block
   if(ip->addrs[NDIRECT]){
     bp = bread(ip->dev, ip->addrs[NDIRECT]);
     a = (uint*)bp->data;
@@ -446,6 +507,30 @@ itrunc(struct inode *ip)
     brelse(bp);
     bfree(ip->dev, ip->addrs[NDIRECT]);
     ip->addrs[NDIRECT] = 0;
+  }
+
+  // Free doubly-indirect block
+  if(ip->addrs[NDIRECT+1]){
+    bp = bread(ip->dev, ip->addrs[NDIRECT+1]);
+    a = (uint*)bp->data;
+    for(i = 0; i < NDINDIRECT; i++){
+      if(a[i]){
+        // Read each indirect block in the doubly-indirect block
+        bp2 = bread(ip->dev, a[i]);
+        a2 = (uint*)bp2->data;
+        for(j = 0; j < NINDIRECT; j++){
+          if(a2[j])
+            bfree(ip->dev, a2[j]);
+        }
+        brelse(bp2);
+        // Free the indirect block itself
+        bfree(ip->dev, a[i]);
+      }
+    }
+    brelse(bp);
+    // Free the doubly-indirect block itself
+    bfree(ip->dev, ip->addrs[NDIRECT+1]);
+    ip->addrs[NDIRECT+1] = 0;
   }
 
   ip->size = 0;
@@ -464,10 +549,6 @@ stati(struct inode *ip, struct stat *st)
   st->size = ip->size;
 }
 
-// Read data from inode.
-// Caller must hold ip->lock.
-// If user_dst==1, then dst is a user virtual address;
-// otherwise, dst is a kernel address.
 int
 readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
 {
@@ -495,13 +576,6 @@ readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
   return tot;
 }
 
-// Write data to inode.
-// Caller must hold ip->lock.
-// If user_src==1, then src is a user virtual address;
-// otherwise, src is a kernel address.
-// Returns the number of bytes successfully written.
-// If the return value is less than the requested n,
-// there was an error of some kind.
 int
 writei(struct inode *ip, int user_src, uint64 src, uint off, uint n)
 {
@@ -530,9 +604,6 @@ writei(struct inode *ip, int user_src, uint64 src, uint off, uint n)
   if(off > ip->size)
     ip->size = off;
 
-  // write the i-node back to disk even if the size didn't change
-  // because the loop above might have called bmap() and added a new
-  // block to ip->addrs[].
   iupdate(ip);
 
   return tot;

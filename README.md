@@ -131,7 +131,7 @@ git checkout feature/demand-paging
 or
 
 ```bash
-git checkout feature/Large-Files-&-Symbolic-Links
+git checkout feature/Large-Files-\&-Symbolic-Links
 ```
 
 Then build xv6:

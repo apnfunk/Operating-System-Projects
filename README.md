@@ -26,14 +26,33 @@ To view the code for a specific feature, please **switch to the corresponding br
 *   **Page Replacement:** Implemented **Most Recently Used (MRU)** eviction policy to manage resident pages.
 *   **Disk Swapping:** Enabled swapping victim pages to a simulated disk interface when physical RAM is exhausted.
 *   **Monitoring:** Extended the kernel to track page faults, swap-ins, and swap-outs via the `getpagestat()` system call.
+* 
+### 4. [Branch: Large Files & Symbolic Links](https://github.com/apnfunk/Operating-System-Projects/tree/feature/Large-Files-%26-Symbolic-Links)
 
+**Focus:** File System Extensions
+
+This branch extends the xv6 file system with two major features:
+
+#### Task 1: Large File Support (Doubly-Indirect Blocks)
+
+- **Large Files:** Extended the xv6 inode structure with a **doubly-indirect block pointer**, increasing the maximum supported file size from approximately **268 KB to 8 MB**.
+- **Block Mapping:** Enhanced the file system to support **three-level block addressing** (direct, single-indirect, and doubly-indirect) with on-demand block allocation.
+- **Memory Management:** Updated block deallocation logic to recursively free indirect metadata blocks during file truncation.
+- **Compatibility:** Preserved the original on-disk inode size by reducing the number of direct pointers instead of modifying the inode layout.
+
+#### Task 2: Symbolic Links
+
+- **System Call:** Implemented a new `symlink(target, path)` system call for creating symbolic (soft) links.
+- **Path Resolution:** Extended `open()` to transparently resolve symbolic links while preventing infinite loops through bounded recursive traversal.
+- **POSIX Support:** Added support for the `O_NOFOLLOW` flag, allowing applications to open the symbolic link itself instead of its target.
+- **File System Integration:** Added a dedicated inode type (`T_SYMLINK`) and integrated symbolic links into xv6's file creation and pathname resolution logic.
 ---
 
 ## Tech Stack
 *   **Kernel:** C (RISC-V Architecture)
 *   **User Space:** C
 *   **Assembly:** RISC-V (`trampoline.S`, `entry.S`)
-*   **Tools:** QEMU Emulator, GDB Debugger
+*   **Tools:** QEMU Emulator
 
 ## Usage
 To run any specific implementation:
@@ -53,6 +72,10 @@ To run any specific implementation:
 
     ```bash
     git checkout feature/demand-paging
+    ````
+
+     ```bash
+    git checkout feature/Large-Files-&-Symbolic-Links
     ````
 3. Compile and run:
     ```bash

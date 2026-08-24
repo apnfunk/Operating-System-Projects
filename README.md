@@ -1,6 +1,6 @@
 # Operating System Projects
 
-A collection of operating system projects exploring process management, scheduling, virtual memory, file systems, and UNIX shell implementation.
+A collection of operating system projects exploring process management, scheduling, virtual memory, file systems, and custom shell implementation.
 
 The repository contains:
 

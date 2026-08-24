@@ -1,86 +1,145 @@
-# xv6 Kernel Extensions
+# Operating System Projects
 
-This repository serves as a monorepo for advanced operating system feature implementations built upon the xv6 RISC-V kernel.
+A collection of operating system projects exploring process management, scheduling, virtual memory, file systems, and UNIX shell implementation.
 
-> **Note:** Because these features involve deep, mutually exclusive modifications to core kernel subsystems (Process Scheduler, Virtual Memory, Trap Handling), they are isolated in separate **Git Branches**.
+The repository contains:
 
-## Implementation Modules
+- 🐚 A standalone **Custom UNIX Shell** (available in the `custom-shell/` directory on the `main` branch).
+- 🖥️ Multiple **xv6 kernel extensions**, each maintained in its own feature branch.
 
-To view the code for a specific feature, please **switch to the corresponding branch** using the dropdown menu above or the links below.
+> **Note:** The xv6 implementations involve deep, mutually exclusive modifications to core kernel subsystems (Process Scheduler, Virtual Memory, File System, and Trap Handling). Therefore, each implementation is maintained in a separate Git branch.
 
-### 1. [Branch: Weighted Round Robin Scheduler](https://github.com/apnfunk/Operating-System-Projects/tree/feature/weighted_rr_scheduler)
+---
+
+## Custom UNIX Shell (Main Branch)
+
+**Focus:** UNIX Process Management & Shell Design
+
+Implemented a POSIX-style command-line shell from scratch in C++ using low-level system programming concepts.
+
+### Features
+
+- Command execution with arguments
+- Pipes (`|`) and input/output redirection (`<`, `>`)
+- Background process execution (`&`)
+- Wildcard expansion (`*`, `?`)
+- Persistent command history
+- Signal handling (`Ctrl+C`, `Ctrl+Z`)
+- Built-in commands including `cd` and `delep`
+- **Malware Detection (`squashbug`)**
+  - Uses a **process activity heuristic** based on child-process count and process start time while filtering system processes.
+  - Uses a **process ancestry heuristic** to identify suspicious executables through parent-child lineage traversal.
+
+---
+
+## xv6 Kernel Extension Modules
+
+To view a particular implementation, switch to the corresponding feature branch.
+
+### 1. [Weighted Round Robin Scheduler](https://github.com/apnfunk/Operating-System-Projects/tree/feature/weighted_rr_scheduler)
+
 **Focus:** Process Scheduling & CPU Resource Management
-*   **Algorithm:** Implemented a **Weighted Round Robin (WRR)** policy where CPU time slices are proportional to user-defined process priorities.
-*   **Starvation Avoidance:** Designed the dispatcher to ensure low-priority processes receive minimal CPU guarantees, preventing indefinite blocking.
-*   **System Calls:** Added `set_priority(pid, n)` and `get_priority()` to allow dynamic userspace control over process execution weights.
-*   **Concurrency:** Secured the process control block (PCB) with spinlocks to prevent race conditions during priority updates in a multi-core environment.
 
-### 2. [Branch: Copy-on-Write (COW) Fork](https://github.com/apnfunk/Operating-System-Projects/tree/feature/COW(copy-on-write))
+- Implemented a **Weighted Round Robin (WRR)** scheduler with CPU time slices proportional to process priority.
+- Added `set_priority(pid, priority)` and `get_priority()` system calls.
+- Guaranteed minimum CPU allocation to lower-priority processes to prevent starvation.
+- Protected priority updates using spinlocks for safe multicore execution.
+
+---
+
+### 2. [Copy-on-Write (COW) Fork](https://github.com/apnfunk/Operating-System-Projects/tree/feature/COW(copy-on-write))
+
 **Focus:** Virtual Memory Optimization
-*   **Mechanism:** Implemented **Atomic Reference Counting** for physical pages (`kalloc.c`).
-*   **Logic:** Modified `fork()` to map parent pages as read-only in the child. Upon a write attempt (Page Fault), the kernel allocates a new page, copies data, and updates permissions.
-*   **Impact:** Significantly reduces memory overhead and `fork()` latency for large processes.
 
-### 3. [Branch: Demand Paging & MRU Replacement](https://github.com/apnfunk/Operating-System-Projects/tree/feature/demand-paging)
-**Focus:** Memory Virtualization & Swapping
-*   **Page Replacement:** Implemented **Most Recently Used (MRU)** eviction policy to manage resident pages.
-*   **Disk Swapping:** Enabled swapping victim pages to a simulated disk interface when physical RAM is exhausted.
-*   **Monitoring:** Extended the kernel to track page faults, swap-ins, and swap-outs via the `getpagestat()` system call.
-* 
-### 4. [Branch: Large Files & Symbolic Links](https://github.com/apnfunk/Operating-System-Projects/tree/feature/Large-Files-%26-Symbolic-Links)
+- Implemented **atomic reference counting** for physical pages.
+- Modified `fork()` to initially share read-only pages between parent and child.
+- Allocated private pages only upon write faults.
+- Reduced memory usage and improved `fork()` performance.
+
+---
+
+### 3. [Demand Paging & MRU Replacement](https://github.com/apnfunk/Operating-System-Projects/tree/feature/demand-paging)
+
+**Focus:** Virtual Memory & Swapping
+
+- Implemented **Most Recently Used (MRU)** page replacement.
+- Added swapping between physical memory and simulated disk.
+- Introduced `getpagestat()` to monitor page faults, swap-ins, and swap-outs.
+
+---
+
+### 4. [Large Files & Symbolic Links](https://github.com/apnfunk/Operating-System-Projects/tree/feature/filesystem_extensions)
 
 **Focus:** File System Extensions
 
-This branch extends the xv6 file system with two major features:
+#### Large File Support
 
-#### Task 1: Large File Support (Doubly-Indirect Blocks)
+- Extended xv6 with **doubly-indirect block addressing**, increasing the maximum supported file size from approximately **268 KB to 8 MB**.
+- Updated block allocation and deallocation to support three-level block mapping while preserving the original inode layout.
 
-- **Large Files:** Extended the xv6 inode structure with a **doubly-indirect block pointer**, increasing the maximum supported file size from approximately **268 KB to 8 MB**.
-- **Block Mapping:** Enhanced the file system to support **three-level block addressing** (direct, single-indirect, and doubly-indirect) with on-demand block allocation.
-- **Memory Management:** Updated block deallocation logic to recursively free indirect metadata blocks during file truncation.
-- **Compatibility:** Preserved the original on-disk inode size by reducing the number of direct pointers instead of modifying the inode layout.
+#### Symbolic Links
 
-#### Task 2: Symbolic Links
+- Implemented the `symlink(target, path)` system call.
+- Added support for symbolic link resolution with bounded recursive traversal.
+- Introduced the `O_NOFOLLOW` flag and integrated symbolic links into xv6 pathname resolution.
 
-- **System Call:** Implemented a new `symlink(target, path)` system call for creating symbolic (soft) links.
-- **Path Resolution:** Extended `open()` to transparently resolve symbolic links while preventing infinite loops through bounded recursive traversal.
-- **POSIX Support:** Added support for the `O_NOFOLLOW` flag, allowing applications to open the symbolic link itself instead of its target.
-- **File System Integration:** Added a dedicated inode type (`T_SYMLINK`) and integrated symbolic links into xv6's file creation and pathname resolution logic.
 ---
 
 ## Tech Stack
-*   **Kernel:** C (RISC-V Architecture)
-*   **User Space:** C
-*   **Assembly:** RISC-V (`trampoline.S`, `entry.S`)
-*   **Tools:** QEMU Emulator
 
-## Usage
-To run any specific implementation:
-1. Clone the repo:
-   ```bash
-   git clone https://github.com/apnfunk/Operating-System-Projects.git
-   cd xv6-enhanced-kernel
-   ```
-2. Switch to the desired feature branch:
-    ```bash
-    git checkout feature/weighted_rr_scheduler
-    ```
-
-    ```bash
-    git checkout feature/COW(copy-on-write)
-    ```
-
-    ```bash
-    git checkout feature/demand-paging
-    ````
-
-     ```bash
-    git checkout feature/Large-Files-&-Symbolic-Links
-    ````
-3. Compile and run:
-    ```bash
-    make clean
-    make qemu
-    ```
+- **Languages:** C, C++, RISC-V Assembly
+- **Kernel:** xv6 (RISC-V)
+- **System Programming:** POSIX APIs
+- **Tools:** QEMU, GDB, GNU Make
 
 ---
+
+## Usage
+
+Clone the repository:
+
+```bash
+git clone https://github.com/apnfunk/Operating-System-Projects.git
+cd Operating-System-Projects
+```
+
+### Run the Custom UNIX Shell
+
+```bash
+cd custom-shell
+make
+./shell
+```
+
+### Run an xv6 Kernel Extension
+
+Switch to the required branch:
+
+```bash
+git checkout feature/weighted_rr_scheduler
+```
+
+or
+
+```bash
+git checkout feature/COW(copy-on-write)
+```
+
+or
+
+```bash
+git checkout feature/demand-paging
+```
+
+or
+
+```bash
+git checkout feature/filesystem_extensions
+```
+
+Then build xv6:
+
+```bash
+make clean
+make qemu
+```
